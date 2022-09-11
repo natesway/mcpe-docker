@@ -40,16 +40,15 @@ RUN apt-get update
 RUN apt-get install -y pip
 RUN pip install aqtinstall
 RUN aqt list-qt linux desktop
-RUN aqt list-qt linux desktop --arch  5.15.2
-RUN aqt list-qt linux desktop --modules 5.15.2 gcc_64
+RUN aqt list-qt linux desktop --arch  6.2.2
+RUN aqt list-qt linux desktop --modules 6.2.2 gcc_64
 RUN ldd --version ldd
-# debug_info qtcharts qtdatavis3d qtlottie qtnetworkauth qtpurchasing qtquick3d qtquicktimeline qtscript qtvirtualkeyboard qtwaylandcompositor qtwebengine qtwebglplugin
-RUN cd /usr/local && aqt install-qt linux desktop 5.15.2 -m qtwebengine qtwebglplugin
-RUN mv /usr/local/5.15.2/gcc_64 /usr/local/qt
+RUN cd /usr/local && aqt install-qt linux desktop 6.2.2 -m qtwebengine qtwebview qtwaylandcompositor qt5compat qtwebchannel qtpositioning
+RUN mv /usr/local/6.2.2/gcc_64 /usr/local/qt
 ENV PATH="/usr/local/qt/bin:$PATH"
 ENV CPATH=/usr/local/qt/include
 ENV CMAKE_PREFIX_PATH=/usr/local/qt/lib/cmake
-ENV Qt5_DIR=/usr/local/qt/lib/cmake/Qt5
+ENV Qt6_DIR=/usr/local/qt/lib/cmake/Qt6
 RUN echo /usr/local/qt/lib >> /etc/ld.so.conf
 RUN apt-get update && apt-get upgrade -y
 RUN apt-get install -y libdrm-dev mesa-common-dev libglu1-mesa-dev curl libcurl4-openssl-dev libxkbcommon-x11-0 \
@@ -60,11 +59,11 @@ RUN apt-get install -y libdrm-dev mesa-common-dev libglu1-mesa-dev curl libcurl4
 RUN cd /usr/local/src && git clone --recursive https://github.com/minecraft-linux/msa-manifest.git msa
 
 # patch MSA UI to support Qt6
-RUN cd /usr/local/src/msa/msa-ui-qt && git checkout master && git pull
+RUN cd /usr/local/src/msa/msa-ui-qt && git checkout 1193b63a56ac5cfb000a65b9243e726696a5055c
 
 # make MSA
 RUN mkdir -p /usr/local/src/msa/build 
-RUN cd /usr/local/src/msa/build && cmake -DENABLE_MSA_QT_UI=ON -DCMAKE_INSTALL_PREFIX=/usr -DQT_VERSION=5 ..
+RUN cd /usr/local/src/msa/build && cmake -DENABLE_MSA_QT_UI=ON -DCMAKE_INSTALL_PREFIX=/usr -DQT_VERSION=6 ..
 RUN cd /usr/local/src/msa/build && make -j $(nproc --ignore=2)
 RUN cd /usr/local/src/msa/build && checkinstall --pkgname msa --maintainer ChristopherHX --pkglicense WTFPL --pkgarch amd64
 RUN cd /usr/local/src/msa/build && cp *.deb /opt/
@@ -76,33 +75,25 @@ RUN apt-get install -y ca-certificates \
   autoconf autotools-dev automake libtool texinfo
 
 # make launcher
-RUN cd /usr/local/src && git clone --branch ng --recursive https://github.com/minecraft-linux/mcpelauncher-manifest.git mcpelauncher 
-
-# reverse commit that breaks some things
-# https://discordapp.com/channels/429580677617418240/452451848066957314/1012350801118765108
-# COPY empty_libglesv2.patch /usr/local/src/mcpelauncher/mcpelauncher-core/empty_libglesv2.patch
+RUN cd /usr/local/src && git clone --branch qt6 --recursive https://github.com/minecraft-linux/mcpelauncher-manifest.git mcpelauncher 
+RUN git config --global user.email "justdan96@gmail.com" && git config --global user.name "Dan Bryant"
 
 # checkout repo versions from the Flathub installer
 # https://github.com/flathub/io.mrarm.mcpelauncher/blob/beta/io.mrarm.mcpelauncher.json#L124
-RUN cd /usr/local/src/mcpelauncher/mcpelauncher-core && git checkout cc06087170a51e415f68f21985eb49c3070e5f97
-RUN cd /usr/local/src/mcpelauncher/mcpelauncher-client && git checkout c521350d71f43feefc876074fe7991866c4edd45
+# but there is a commit that breaks some things, that change is reversed in the snapshot/renderdragon branch
+# https://discordapp.com/channels/429580677617418240/452451848066957314/1012350801118765108
+RUN cd /usr/local/src/mcpelauncher/mcpelauncher-core && git checkout 178bd978865a71c1ce1fad986a0893e75e3c347b
 
-# patch some files, apparently necessary for 1.19 support
-# https://github.com/flathub/io.mrarm.mcpelauncher/blob/beta/io.mrarm.mcpelauncher.json#L146
-RUN cd /usr/local/src/mcpelauncher &&  sed -i -e "s/.*setupGLES2Symbols.*//g" mcpelauncher-client/src/main.cpp
-RUN cd /usr/local/src/mcpelauncher &&  sed -i -e "s/.*modLoader;.*/     MinecraftUtils::setupGLES2Symbols(fake_egl::eglGetProcAddress);\0/g" mcpelauncher-client/src/main.cpp
-RUN cd /usr/local/src/mcpelauncher &&  sed -i -e "s/.*syms;.*/\0    struct ___data {\n          size_t arena; \n             \n            size_t ordblks; \n             \n            size_t smblks; \n             \n            size_t hblks; \n             \n            size_t hblkhd; \n             \n            size_t usmblks; \n             \n            size_t fsmblks; \n             \n            size_t uordblks; \n             \n            size_t fordblks; \n             \n            size_t keepcost;\n                };\n    android_syms[\"mallinfo\"] = (void*)+[](void*) -> ___data {\n        return { .ordblks = 8000000, .usmblks= 8000000, .fordblks= 8000000 };\n    };/g" mcpelauncher-client/src/main.cpp
-RUN cd /usr/local/src/mcpelauncher &&  sed -i "48,57d" mcpelauncher-client/src/fake_looper.cpp
-RUN cd /usr/local/src/mcpelauncher &&  sed -i -e "s/.*ALooper_prepare.*/     Log::info(\"Launcher\", \"Loading gamepad mappings\");\n    WindowCallbacks::loadGamepadMappings();\n#ifdef MCPELAUNCHER_ENABLE_ERROR_WINDOW\n    GameWindowManager::getManager()->setErrorHandler(std::make_shared<ErrorWindow>());\n#endif\n\n    Log::info(\"Launcher\", \"Creating window\");\n    static auto associatedWindow = GameWindowManager::getManager()->createWindow(\"Minecraft\",\n            options.windowWidth, options.windowHeight, options.graphicsApi);\0/g" mcpelauncher-client/src/fake_looper.cpp
-RUN cd /usr/local/src/mcpelauncher &&  sed -i "s/.*currentLooper =.*/\0currentLooper->associatedWindow = associatedWindow;associatedWindow->makeCurrent(false);/g" mcpelauncher-client/src/fake_looper.cpp
-RUN cd /usr/local/src/mcpelauncher &&  sed -i -e "s/useDirectKeyboardInput =.*/useDirectKeyboardInput = false;/g" mcpelauncher-client/src/window_callbacks.cpp
-RUN cd /usr/local/src/mcpelauncher/mcpelauncher-client && git diff > /opt/flat.patch
-RUN cd /usr/local/src/mcpelauncher/mcpelauncher-client && git diff
+# justdan96-renderdragon2 branch includes patches from the snapshot/renderdragon and master branches
+# justdan96-master branch includes patches from Flathub with clang-format ran over all the files
+RUN cd /usr/local/src/mcpelauncher/mcpelauncher-client && git checkout master
+RUN cd /usr/local/src/mcpelauncher/mcpelauncher-client && git remote set-url origin https://github.com/justdan96/mcpelauncher-client.git
+RUN cd /usr/local/src/mcpelauncher/mcpelauncher-client && git pull && git checkout master
 
 RUN mkdir -p /usr/local/src/mcpelauncher/build
 RUN cd /usr/local/src/mcpelauncher/build && \
   CC=clang CXX=clang++ cmake .. -Wno-dev -DCMAKE_BUILD_TYPE=Release -DJNI_USE_JNIVM=ON \
-  -DBUILD_FAKE_JNI_EXAMPLES=OFF -DCMAKE_INSTALL_PREFIX=/usr
+  -DBUILD_FAKE_JNI_EXAMPLES=OFF -DCMAKE_INSTALL_PREFIX=/opt/mcpe -DQT_VERSION=5
 RUN cd /usr/local/src/mcpelauncher/build && /bin/bash -c "make -j $(nproc --ignore=2)"
 RUN cd /usr/local/src/mcpelauncher/build && checkinstall --pkgname mcpelauncher --maintainer ChristopherHX --pkglicense WTFPL --pkgarch amd64
 RUN cd /usr/local/src/mcpelauncher/build && cp *.deb /opt/
@@ -111,10 +102,10 @@ RUN cd /usr/local/src/mcpelauncher/build && cp *.deb /opt/
 RUN apt-get install -y libprotobuf-dev protobuf-compiler libzip-dev
 
 # make launcher UI 
-RUN cd /usr/local/src && git clone --recursive https://github.com/minecraft-linux/mcpelauncher-ui-manifest.git mcpelauncher-ui
-RUN cd /usr/local/src/mcpelauncher-ui && git checkout ng && git pull && git submodule update 
+RUN cd /usr/local/src && git clone --branch qt6 --recursive https://github.com/minecraft-linux/mcpelauncher-ui-manifest.git mcpelauncher-ui
 RUN mkdir -p /usr/local/src/mcpelauncher-ui/build
-RUN cd /usr/local/src/mcpelauncher-ui/build && /bin/bash -c "cmake -DCMAKE_INSTALL_PREFIX=/usr .."
+RUN cd /usr/local/src/mcpelauncher-ui/build && cmake -DCMAKE_INSTALL_PREFIX=/opt/mcpe -DLAUNCHER_CHANGE_LOG="<p>Testing</p>" \
+  -DLAUNCHER_VERSIONDB_URL=https://raw.githubusercontent.com/minecraft-linux/mcpelauncher-versiondb/master ..
 RUN cd /usr/local/src/mcpelauncher-ui/build && /bin/bash -c "make -j $(nproc --ignore=2)"
 RUN cd /usr/local/src/mcpelauncher-ui/build && checkinstall --pkgname mcpelauncher-ui --maintainer ChristopherHX --pkglicense WTFPL --pkgarch amd64
 RUN cd /usr/local/src/mcpelauncher-ui/build && cp *.deb /opt/
@@ -122,14 +113,15 @@ RUN cd /usr/local/src/mcpelauncher-ui/build && cp *.deb /opt/
 # make extract utility
 RUN cd /usr/local/src && git clone https://github.com/minecraft-linux/mcpelauncher-extract.git -b ng
 RUN mkdir -p /usr/local/src/mcpelauncher-extract/build
-RUN cd /usr/local/src/mcpelauncher-extract/build && /bin/bash -c "cmake -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=NO .."
+RUN cd /usr/local/src/mcpelauncher-extract/build && /bin/bash -c "cmake -DCMAKE_INSTALL_PREFIX=/opt/mcpe -DBUILD_SHARED_LIBS=NO .."
 RUN cd /usr/local/src/mcpelauncher-extract/build && /bin/bash -c "make -j $(nproc --ignore=2)"
-RUN cd /usr/local/src/mcpelauncher-extract/build && cp mcpelauncher-extract /usr/bin/mcpelauncher-extract
+RUN cd /usr/local/src/mcpelauncher-extract/build && cp mcpelauncher-extract /opt/mcpe/bin/mcpelauncher-extract
 RUN cd /usr/local/src/mcpelauncher-extract/build && cp mcpelauncher-extract /opt/mcpelauncher-extract
 
 # install linuxdeploy and the Qt plugin
-RUN curl -sLo /usr/local/bin/linuxdeploy-x86_64.AppImage "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage"
-RUN curl -sLo /usr/local/bin/linuxdeploy-plugin-qt-x86_64.AppImage "https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage"
+RUN curl -sLo /usr/local/bin/linuxdeploy-x86_64.AppImage "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage" 
+RUN curl -sLo /usr/local/bin/linuxdeploy-plugin-qt-x86_64.AppImage \
+  "https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage" 
 RUN chmod +x /usr/local/bin/linuxdeploy-x86_64.AppImage
 RUN chmod +x /usr/local/bin/linuxdeploy-plugin-qt-x86_64.AppImage
 
