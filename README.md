@@ -23,6 +23,6 @@ docker run -it --rm -v $(pwd):/workdir -w="/workdir" mcpe-docker bash
 To copy the output files from the fully built container:
 ```
 docker create -it --name copy mcpe-docker bash
-docker cp copy:/opt/bin .
+docker cp copy:/opt/output/ .
 docker rm -f copy
 ```
