@@ -17,32 +17,16 @@ RUN apt-get install -y git patch lzma-dev libxml2-dev libssl-dev python curl wge
 # common dependencies
 RUN apt-get install -y openssl pkg-config libarchive-tools
 RUN mkdir -p /usr/local/src
-RUN mkdir -p /opt/AppDir
+RUN mkdir -p /opt/output
 RUN cd /tmp && wget https://cmake.org/files/v3.16/cmake-3.16.9-Linux-x86_64.tar.gz 
 RUN cd /usr/local && bsdtar --strip-components=1 -xf /tmp/cmake-3.16.9-Linux-x86_64.tar.gz
 
-# build clang from source
-RUN mkdir -p /usr/local/src/clang/build
-RUN cd /tmp && wget https://github.com/llvm/llvm-project/archive/refs/tags/llvmorg-12.0.1.zip
-RUN cd /usr/local/src/clang && bsdtar --strip-components=1 -xf /tmp/llvmorg-12.0.1.zip
-RUN cd /usr/local/src/clang/build && cmake ../llvm \
-  -G "Unix Makefiles" \
-  -DCMAKE_INSTALL_PREFIX=/usr/local \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DLLVM_ENABLE_ASSERTIONS=OFF \
-  -DLLVM_ENABLE_PROJECTS="clang;libcxx;libcxxabi" \
-  -DLLVM_TEMPORARILY_ALLOW_OLD_TOOLCHAIN=1
-RUN cd /usr/local/src/clang/build && make -j $(nproc --ignore=2)
-RUN cd /usr/local/src/clang/build && make install
+# use Clang + LLVM 10 from repos - rather than compiling 12 from source
+RUN apt-get install -y clang llvm
 
 # MSA dependencies
-RUN apt-get update
 RUN apt-get install -y pip
 RUN pip install aqtinstall
-RUN aqt list-qt linux desktop
-RUN aqt list-qt linux desktop --arch  6.2.2
-RUN aqt list-qt linux desktop --modules 6.2.2 gcc_64
-RUN ldd --version ldd
 RUN cd /usr/local && aqt install-qt linux desktop 6.2.2 -m qtwebengine qtwebview qtwaylandcompositor qt5compat qtwebchannel qtpositioning
 RUN mv /usr/local/6.2.2/gcc_64 /usr/local/qt
 ENV PATH="/usr/local/qt/bin:$PATH"
@@ -66,7 +50,7 @@ RUN mkdir -p /usr/local/src/msa/build
 RUN cd /usr/local/src/msa/build && cmake -DENABLE_MSA_QT_UI=ON -DCMAKE_INSTALL_PREFIX=/usr -DQT_VERSION=6 ..
 RUN cd /usr/local/src/msa/build && make -j $(nproc --ignore=2)
 RUN cd /usr/local/src/msa/build && checkinstall --pkgname msa --maintainer ChristopherHX --pkglicense WTFPL --pkgarch amd64
-RUN cd /usr/local/src/msa/build && cp *.deb /opt/
+RUN cd /usr/local/src/msa/build && cp msa*.deb /opt/output/msa.deb
 
 # launcher dependencies
 RUN apt-get install -y ca-certificates \
@@ -76,7 +60,6 @@ RUN apt-get install -y ca-certificates \
 
 # make launcher
 RUN cd /usr/local/src && git clone --branch qt6 --recursive https://github.com/minecraft-linux/mcpelauncher-manifest.git mcpelauncher 
-RUN git config --global user.email "justdan96@gmail.com" && git config --global user.name "Dan Bryant"
 
 # checkout repo versions from the Flathub installer
 # https://github.com/flathub/io.mrarm.mcpelauncher/blob/beta/io.mrarm.mcpelauncher.json#L124
@@ -93,10 +76,10 @@ RUN cd /usr/local/src/mcpelauncher/mcpelauncher-client && git pull && git checko
 RUN mkdir -p /usr/local/src/mcpelauncher/build
 RUN cd /usr/local/src/mcpelauncher/build && \
   CC=clang CXX=clang++ cmake .. -Wno-dev -DCMAKE_BUILD_TYPE=Release -DJNI_USE_JNIVM=ON \
-  -DBUILD_FAKE_JNI_EXAMPLES=OFF -DCMAKE_INSTALL_PREFIX=/opt/mcpe -DQT_VERSION=5
+  -DBUILD_FAKE_JNI_EXAMPLES=OFF -DCMAKE_INSTALL_PREFIX=/opt/mcpe -DQT_VERSION=6
 RUN cd /usr/local/src/mcpelauncher/build && /bin/bash -c "make -j $(nproc --ignore=2)"
 RUN cd /usr/local/src/mcpelauncher/build && checkinstall --pkgname mcpelauncher --maintainer ChristopherHX --pkglicense WTFPL --pkgarch amd64
-RUN cd /usr/local/src/mcpelauncher/build && cp *.deb /opt/
+RUN cd /usr/local/src/mcpelauncher/build && cp mcpelauncher*.deb /opt/output/mcpelauncher.deb
 
 # launcher UI dependencies
 RUN apt-get install -y libprotobuf-dev protobuf-compiler libzip-dev
@@ -106,17 +89,16 @@ RUN cd /usr/local/src && git clone --branch qt6 --recursive https://github.com/m
 RUN mkdir -p /usr/local/src/mcpelauncher-ui/build
 RUN cd /usr/local/src/mcpelauncher-ui/build && cmake -DCMAKE_INSTALL_PREFIX=/opt/mcpe -DLAUNCHER_CHANGE_LOG="<p>Testing</p>" \
   -DLAUNCHER_VERSIONDB_URL=https://raw.githubusercontent.com/minecraft-linux/mcpelauncher-versiondb/master ..
-RUN cd /usr/local/src/mcpelauncher-ui/build && /bin/bash -c "make -j $(nproc --ignore=2)"
+RUN cd /usr/local/src/mcpelauncher-ui/build && make -j $(nproc --ignore=2)
 RUN cd /usr/local/src/mcpelauncher-ui/build && checkinstall --pkgname mcpelauncher-ui --maintainer ChristopherHX --pkglicense WTFPL --pkgarch amd64
-RUN cd /usr/local/src/mcpelauncher-ui/build && cp *.deb /opt/
+RUN cd /usr/local/src/mcpelauncher-ui/build && cp mcpelauncher-ui*.deb /opt/output/mcpelauncher-ui.deb
 
 # make extract utility
 RUN cd /usr/local/src && git clone https://github.com/minecraft-linux/mcpelauncher-extract.git -b ng
 RUN mkdir -p /usr/local/src/mcpelauncher-extract/build
-RUN cd /usr/local/src/mcpelauncher-extract/build && /bin/bash -c "cmake -DCMAKE_INSTALL_PREFIX=/opt/mcpe -DBUILD_SHARED_LIBS=NO .."
-RUN cd /usr/local/src/mcpelauncher-extract/build && /bin/bash -c "make -j $(nproc --ignore=2)"
-RUN cd /usr/local/src/mcpelauncher-extract/build && cp mcpelauncher-extract /opt/mcpe/bin/mcpelauncher-extract
-RUN cd /usr/local/src/mcpelauncher-extract/build && cp mcpelauncher-extract /opt/mcpelauncher-extract
+RUN cd /usr/local/src/mcpelauncher-extract/build && cmake -DCMAKE_INSTALL_PREFIX=/opt/mcpe -DBUILD_SHARED_LIBS=NO ..
+RUN cd /usr/local/src/mcpelauncher-extract/build && make -j $(nproc --ignore=2)
+RUN cd /usr/local/src/mcpelauncher-extract/build && cp mcpelauncher-extract /opt/output/mcpelauncher-extract
 
 # install linuxdeploy and the Qt plugin
 RUN curl -sLo /usr/local/bin/linuxdeploy-x86_64.AppImage "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage" 
@@ -132,3 +114,6 @@ RUN dd if=/dev/zero of=/usr/local/bin/linuxdeploy-plugin-qt-x86_64.AppImage conv
 # ready AppImage resources
 RUN cp /usr/local/src/mcpelauncher-ui/mcpelauncher-ui-qt/Resources/mcpelauncher-icon.svg /opt/mcpelauncher-ui-qt.svg
 RUN cp /usr/local/src/mcpelauncher-ui/mcpelauncher-ui-qt/mcpelauncher-ui-qt.desktop /opt/mcpelauncher-ui-qt.desktop
+
+# clean up all sources
+RUN rm -rf /usr/local/src/*
