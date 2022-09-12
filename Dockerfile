@@ -45,11 +45,23 @@ RUN cd /usr/local/src && git clone --recursive https://github.com/minecraft-linu
 # patch MSA UI to support Qt6
 RUN cd /usr/local/src/msa/msa-ui-qt && git checkout 1193b63a56ac5cfb000a65b9243e726696a5055c
 
+COPY get-deps /usr/local/bin/get-deps
+RUN chmod +x /usr/local/bin/get-deps
+RUN cat /usr/local/bin/get-deps
+
 # make MSA
 RUN mkdir -p /usr/local/src/msa/build 
-RUN cd /usr/local/src/msa/build && cmake -DENABLE_MSA_QT_UI=ON -DCMAKE_INSTALL_PREFIX=/usr -DQT_VERSION=6 ..
+RUN cd /usr/local/src/msa/build && cmake -DENABLE_MSA_QT_UI=ON -DCMAKE_INSTALL_PREFIX=/opt/mcpe -DQT_VERSION=6 ..
 RUN cd /usr/local/src/msa/build && make -j $(nproc --ignore=2)
-RUN cd /usr/local/src/msa/build && checkinstall --pkgname msa --maintainer ChristopherHX --pkglicense WTFPL --pkgarch amd64
+RUN cd /usr/local/src/msa/build && get-deps ./msa-daemon/msa-daemon >> deps.txt
+RUN cd /usr/local/src/msa/build && get-deps ./msa-ui-qt/msa-ui-qt >> deps.txt
+# remove dependencies that don't resolve in later versions of Ubuntu:
+# libhogweed5 libldap-2.4-2 libnettle7
+# also remove libsystemd0 dependency
+RUN cd /usr/local/src/msa/build && sed -i -e '/libhogweed5/d' -e '/libnettle7/d' -e '/libldap-2.4-2/d' -e '/libsystemd0/d' deps.txt
+RUN cd /usr/local/src/msa/build && checkinstall --pkgname msa --maintainer ChristopherHX --pkglicense WTFPL --pkgarch amd64 \
+  --pkgsource https://github.com/minecraft-linux/msa-manifest --pkggroup mcpelauncher --nodoc --pkgversion 0.3.4-$(cd .. && git rev-parse --short HEAD) \
+  --requires $(sort < deps.txt | uniq | paste -s -d,) --provides msa-daemon,msa-ui-qt
 RUN cd /usr/local/src/msa/build && cp msa*.deb /opt/output/msa.deb
 
 # launcher dependencies
@@ -78,7 +90,16 @@ RUN cd /usr/local/src/mcpelauncher/build && \
   CC=clang CXX=clang++ cmake .. -Wno-dev -DCMAKE_BUILD_TYPE=Release -DJNI_USE_JNIVM=ON \
   -DBUILD_FAKE_JNI_EXAMPLES=OFF -DCMAKE_INSTALL_PREFIX=/opt/mcpe -DQT_VERSION=6
 RUN cd /usr/local/src/mcpelauncher/build && /bin/bash -c "make -j $(nproc --ignore=2)"
-RUN cd /usr/local/src/mcpelauncher/build && checkinstall --pkgname mcpelauncher --maintainer ChristopherHX --pkglicense WTFPL --pkgarch amd64
+RUN cd /usr/local/src/mcpelauncher/build && get-deps ./mcpelauncher-client/mcpelauncher-client >> deps.txt
+RUN cd /usr/local/src/mcpelauncher/build && get-deps ./mcpelauncher-errorwindow/mcpelauncher-error >> deps.txt
+RUN cd /usr/local/src/mcpelauncher/build && get-deps ./mcpelauncher-webview/mcpelauncher-webview >> deps.txt
+# remove dependencies that don't resolve in later versions of Ubuntu:
+# libhogweed5 libldap-2.4-2 libnettle7
+# also remove libsystemd0 dependency
+RUN cd /usr/local/src/mcpelauncher/build && sed -i -e '/libhogweed5/d' -e '/libnettle7/d' -e '/libldap-2.4-2/d' -e '/libsystemd0/d' deps.txt
+RUN cd /usr/local/src/mcpelauncher/build && checkinstall --pkgname mcpelauncher --maintainer ChristopherHX --pkglicense WTFPL --pkgarch amd64 \
+  --pkgsource https://github.com/minecraft-linux/mcpelauncher-manifest --pkggroup mcpelauncher --nodoc --pkgversion 0.4.0-$(cd .. && git rev-parse --short HEAD) \
+  --requires $(sort < deps.txt | uniq | paste -s -d,) --provides mcpelauncher-client,mcpelauncher-error,mcpelauncher-webview
 RUN cd /usr/local/src/mcpelauncher/build && cp mcpelauncher*.deb /opt/output/mcpelauncher.deb
 
 # launcher UI dependencies
@@ -90,7 +111,14 @@ RUN mkdir -p /usr/local/src/mcpelauncher-ui/build
 RUN cd /usr/local/src/mcpelauncher-ui/build && cmake -DCMAKE_INSTALL_PREFIX=/opt/mcpe -DLAUNCHER_CHANGE_LOG="<p>Testing</p>" \
   -DLAUNCHER_VERSIONDB_URL=https://raw.githubusercontent.com/minecraft-linux/mcpelauncher-versiondb/master ..
 RUN cd /usr/local/src/mcpelauncher-ui/build && make -j $(nproc --ignore=2)
-RUN cd /usr/local/src/mcpelauncher-ui/build && checkinstall --pkgname mcpelauncher-ui --maintainer ChristopherHX --pkglicense WTFPL --pkgarch amd64
+RUN cd /usr/local/src/mcpelauncher-ui/build && get-deps ./mcpelauncher-ui-qt/mcpelauncher-ui-qt >> deps.txt
+# remove dependencies that don't resolve in later versions of Ubuntu:
+# libhogweed5 libldap-2.4-2 libnettle7
+# also remove libsystemd0 dependency
+RUN cd /usr/local/src/mcpelauncher-ui/build && sed -i -e '/libhogweed5/d' -e '/libnettle7/d' -e '/libldap-2.4-2/d' -e '/libsystemd0/d' deps.txt
+RUN cd /usr/local/src/mcpelauncher-ui/build && checkinstall --pkgname mcpelauncher-ui --maintainer ChristopherHX --pkglicense WTFPL --pkgarch amd64 \
+  --pkgsource https://github.com/minecraft-linux/mcpelauncher-ui-manifest --pkggroup mcpelauncher --nodoc --pkgversion 0.4.0-$(cd .. && git rev-parse --short HEAD) \
+  --requires $(sort < deps.txt | uniq | paste -s -d,) --provides mcpelauncher-ui-qt
 RUN cd /usr/local/src/mcpelauncher-ui/build && cp mcpelauncher-ui*.deb /opt/output/mcpelauncher-ui.deb
 
 # make extract utility
