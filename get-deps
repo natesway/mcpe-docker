@@ -1,0 +1,2 @@
+#!/bin/bash
+ldd $1 | awk '/=>/{print $(NF-1)}' | while read n; do dpkg-query -S `echo $n | awk -F'/' '{print $NF}'` ; done | grep ":amd64:" | grep -v "\-heimdal" | sed 's/^\([^:]\+\):.*$/\1/' | sort | uniq
