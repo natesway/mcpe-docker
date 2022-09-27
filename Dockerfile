@@ -77,13 +77,13 @@ RUN cd /usr/local/src && git clone --branch qt6 --recursive https://github.com/m
 # https://github.com/flathub/io.mrarm.mcpelauncher/blob/beta/io.mrarm.mcpelauncher.json#L124
 # but there is a commit that breaks some things, that change is reversed in the snapshot/renderdragon branch
 # https://discordapp.com/channels/429580677617418240/452451848066957314/1012350801118765108
-RUN cd /usr/local/src/mcpelauncher/mcpelauncher-core && git checkout 178bd978865a71c1ce1fad986a0893e75e3c347b
+RUN cd /usr/local/src/mcpelauncher/mcpelauncher-core
 
 # justdan96-renderdragon2 branch includes patches from the snapshot/renderdragon and master branches
 # justdan96-master branch includes patches from Flathub with clang-format ran over all the files
 RUN cd /usr/local/src/mcpelauncher/mcpelauncher-client && git checkout master
 RUN cd /usr/local/src/mcpelauncher/mcpelauncher-client && git remote set-url origin https://github.com/justdan96/mcpelauncher-client.git
-RUN cd /usr/local/src/mcpelauncher/mcpelauncher-client && git pull && git checkout master
+RUN cd /usr/local/src/mcpelauncher/mcpelauncher-client && git pull && git checkout renderdragon2
 
 RUN mkdir -p /usr/local/src/mcpelauncher/build
 RUN cd /usr/local/src/mcpelauncher/build && \
